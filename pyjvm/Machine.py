@@ -6,7 +6,7 @@ from . import exceptions
 import struct
 import io
 from enum import Enum
-
+import operator
 
 class Inst(Enum):
     ICONST_M1 = 0x02
@@ -409,8 +409,7 @@ class Machine:
                 if not nat.desc.endswith("V"):
                     frame.push(ret)
 
-    @opcode(Inst.IF_ICMPGE)
-    def do_IF_ICMPGE(self, frame):
+    def do_IF_ICMP(self, frame, op):
         v2 = frame.stack.pop()
         v1 = frame.stack.pop()
 
@@ -422,44 +421,46 @@ class Machine:
         if type(v2) is str and len(v2) == 1:
             v2 = ord(v2)
 
-        if v1 >= v2:
+        if op(v1,v2):
             frame.ip -= 3
             frame.ip += branch
+                    
+    @opcode(Inst.IF_ICMPGE)
+    def do_IF_ICMPGE(self, frame):
+        self.do_IF_ICMP(self, frame, operator.ge)
 
-    @opcode(Inst.IFGE)
-    def do_IFGE(self, frame):
+    def do_IF(self, frame, op):
         v1 = frame.stack.pop()
 
         branch = read_signed_short(frame)
 
-        if v1 >= 0:
+        if op(v1,0):
             frame.ip -= 3
             frame.ip += branch
+        
+    @opcode(Inst.IFGE)
+    def do_IFGE(self, frame):
+        self.do_IF(self, frame, operator.ge)
 
     @opcode(Inst.IFLE)
     def do_IFLE(self, frame):
-        v1 = frame.stack.pop()
+        self.do_IF(self, frame, operator.le)
 
-        branch = read_signed_short(frame)
-
-        if v1 <= 0:
-            frame.ip -= 3
-            frame.ip += branch
-
-    @opcode(Inst.ISTORE_1)
-    def do_ISTORE_1(self, frame):
+    def do_ISTORE(self, frame, pos):
         val = frame.stack.pop()
         frame.set_local(1, val)
 
+    @opcode(Inst.ISTORE_1)
+    def do_ISTORE_1(self, frame):
+        self.do_ISTORE(self, frame, 1)
+
     @opcode(Inst.ISTORE_2)
     def do_ISTORE_2(self, frame):
-        val = frame.stack.pop()
-        frame.set_local(2, val)
+        self.do_ISTORE(self, frame, 2)
 
     @opcode(Inst.ISTORE_3)
     def do_ISTORE_3(self, frame):
-        val = frame.stack.pop()
-        frame.set_local(3, val)
+        self.do_ISTORE(self, frame, 3)
 
     def execute_code(self, frame):
         code = frame.code
